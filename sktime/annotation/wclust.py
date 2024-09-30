@@ -1,111 +1,116 @@
-"""Extension template for series annotation.
+"""Window Clustering Segmentation.
 
-Purpose of this implementation template:
-    quick implementation of new estimators following the template
-    NOT a concrete class to import! This is NOT a base class or concrete class!
-    This is to be used as a "fill-in" coding template.
-
-How to use this implementation template to implement a new estimator:
-- make a copy of the template in a suitable location, give it a descriptive name.
-- work through all the "todo" comments below
-- fill in code for mandatory methods, and optionally for optional methods
-- you can add more private methods, but do not override BaseEstimator's private methods
-    an easy way to be safe is to prefix your methods with "_custom"
-- change docstrings for functions and the file
-- ensure interface compatibility by sktime.utils.estimator_checks.check_estimator
-- once complete: use as a local library, or contribute to sktime via PR
-- more details:
-  https://www.sktime.net/en/stable/developer_guide/add_estimators.html
-
-Mandatory implements:
-    fitting         - _fit(self, X, Y=None)
-    annotating     - _predict(self, X)
-
-Optional implements:
-    updating        - _update(self, X, Y=None)
-
-Testing - required for sktime test framework and check_estimator usage:
-    get default parameters for test instance(s) - get_test_params()
-
-copyright: sktime developers, BSD-3-Clause License (see LICENSE file)
+Implementing segmentation using clustering, Read more at
+<https://en.wikipedia.org/wiki/Cluster_analysis>_.
 """
+
+import numpy as np
+import pandas as pd
+from sklearn.base import clone
+from sklearn.cluster import KMeans
 
 from sktime.annotation.base import BaseSeriesAnnotator
 
-# todo: add any necessary imports here
+__author__ = ["Ankit-1204"]
+__all__ = ["WindowSegmenter"]
 
 
-class MySeriesAnnotator(BaseSeriesAnnotator):
-    """Custom series annotator.
+def window(window_size, X):
+    """Create a list of segments of chosen Window Size with proper padding.
+
+    Parameters
+    ----------
+    X : Pandas DataFrame
+    window_size : Integer
+
+    Returns
+    -------
+    sub_seg : List of DataFrame
+    """
+    X_size = len(X)
+    sub_seg = [X.iloc[i : window_size + i] for i in range(0, X_size, window_size)]
+    if len(sub_seg[-1]) < window_size:
+        re = window_size - len(sub_seg[-1])
+        remainder = pd.DataFrame(0, index=range(re), columns=X.columns)
+        sub_seg[-1] = pd.concat([sub_seg[-1], remainder], ignore_index=True)
+    return sub_seg
+
+
+def flattenSegments(sub_seg):
+    """Ensure that the function supports multivariate series by Flattening each segment.
+
+    Parameters
+    ----------
+        sub_seg : List of DataFrame
+
+    Returns
+    -------
+        np.array(flat) : Numpy Array
+    """
+    flat = [i.values.flatten() for i in sub_seg]
+    return np.array(flat)
+
+
+def finalLabels(labels, window_size, X):
+    """Convert segment labels to individual time point labels.
+
+    Parameters
+    ----------
+        X :Pandas DataFrame
+        window_size : Integer
+        labels : List
+
+    Returns
+    -------
+        np.array(flabel) : Numpy Array
+    """
+    X_size = len(X)
+    flabel = [labels[i // window_size] for i in range(X_size)]
+    return np.array(flabel)
+
+
+class WindowSegmenter(BaseSeriesAnnotator):
+    """Window-based Time Series Segmentation via Clustering.
+
+    In this we get overlapping and non overlapping subseries using a Sliding window.
+    After that we run a clustering algorithm of our choosing to segment the
+    time series.
 
     todo: write docstring, describing your custom forecaster
 
     Parameters
     ----------
-    parama : int
-        descriptive explanation of parama
-    paramb : string, optional (default='default')
-        descriptive explanation of paramb
-    paramc : boolean, optional (default= whether paramb is not the default)
-        descriptive explanation of paramc
-    and so on
+    clusterer : sklearn.cluster
+        The instance of clustering algorithm used for segmentation.
+    window_size : Integer
+        The size of Sliding Window
 
-    Components
-    ----------
-    est : sktime.estimator, BaseEstimator descendant
-        descriptive explanation of est
-    est2: another estimator
-        descriptive explanation of est2
-    and so on
+    Examples
+    --------
+    >>> from sktime.annotation.wclust import WindowSegmenter
+    >>> from sktime.datasets import load_gunpoint
+    >>> X, y = load_gunpoint()
+    >>> clusterer = KMeans()
+    >>> segmenter = ClusterSegmenter(clusterer, 3)
+    >>> segmenter._fit(X)
+    >>> segment_labels = segmenter._predict(X)
     """
 
-    # Change the `task` and `learning_type` as needed
     _tags = {
         "task": "segmentation",
         "learning_type": "unsupervised",
     }
 
-    # todo: add any hyper-parameters and components to constructor
-    def __init__(
-        self,
-        est,
-        parama,
-        est2=None,
-        paramb="default",
-        paramc=None,
-    ):
-        # estimators should precede parameters
-        #  if estimators have default values, set None and initialize below
-
-        # todo: write any hyper-parameters and components to self
-        self.est = est
-        self.parama = parama
-        self.paramb = paramb
-        self.paramc = paramc
-
+    def __init__(self, clusterer=None, window_size=1):
+        self.clusterer = clusterer
+        self._clusterer_ = clusterer
+        self._window_size = window_size
+        if self.clusterer is None:
+            self._clusterer = KMeans()
+        else:
+            self._clusterer = self.clusterer
         super().__init__()
 
-        # todo: optional, parameter checking logic (if applicable) should happen here
-        # if writes derived values to self, should *not* overwrite self.parama etc
-        # instead, write to self._parama, self._newparam (starting with _)
-
-        # todo: default estimators should have None arg defaults
-        #  and be initialized here
-        #  do this only with default estimators, not with parameters
-        # if est2 is None:
-        #     self.estimator = MyDefaultEstimator()
-
-        # todo: if tags of estimator depend on component tags, set these here
-        #  only needed if estimator is a composite
-        #  tags set in the constructor apply to the object and override the class
-        #
-        # example 1: conditional setting of a tag
-        # if est.foo == 42:
-        #   self.set_tags(handles-missing-data=True)
-        # example 2: cloning tags from component
-        #   self.clone_tags(est2, ["enforce_index_type", "handles-missing-data"])
-
-    # todo: implement this, mandatory
     def _fit(self, X, Y=None):
         """Fit to training data.
 
@@ -126,11 +131,15 @@ class MySeriesAnnotator(BaseSeriesAnnotator):
         ------------
         creates fitted model (attributes ending in "_")
         """
+        if isinstance(X, pd.Series):
+            X = X.to_frame(X)
+        win_x = window(self._window_size, X)
+        seg = flattenSegments(win_x)
+        cloned_clusterer = clone(self._clusterer)
+        cloned_clusterer.fit(seg)
+        self._clusterer_ = cloned_clusterer
+        return self
 
-        # implement here
-        # IMPORTANT: avoid side effects to y, X, fh
-
-    # todo: implement this, mandatory
     def _predict(self, X):
         """Create annotations on test/deployment data.
 
@@ -145,38 +154,15 @@ class MySeriesAnnotator(BaseSeriesAnnotator):
         Y : pd.Series - annotations for sequence X
             exact format depends on annotation type
         """
+        if isinstance(X, pd.Series):
+            X = X.to_frame(X)
+        win_x = window(self._window_size, X)
+        sub = flattenSegments(win_x)
+        self.n_features, self.n_timepoints = X.shape
+        labels = self._clusterer_.predict(sub)
+        flabel = finalLabels(labels, self._window_size, X)
+        return pd.Series(flabel.flatten(), index=X.index)
 
-        # implement here
-        # IMPORTANT: avoid side effects to X, fh
-
-    # todo: consider implementing this, optional
-    # if not implementing, delete the _update method
-    def _update(self, X, Y=None):
-        """Update model with new data and optional ground truth annotations.
-
-        core logic
-
-        Parameters
-        ----------
-        X : pd.DataFrame
-            training data to update model with, time series
-        Y : pd.Series, optional
-            ground truth annotations for training if annotator is supervised
-
-        Returns
-        -------
-        self : returns a reference to self
-
-        State change
-        ------------
-        updates fitted model (attributes ending in "_")
-        """
-
-        # implement here
-        # IMPORTANT: avoid side effects to X, fh
-
-    # todo: return default parameters, so that a test instance can be created
-    #   required for automated unit and integration testing of estimator
     @classmethod
     def get_test_params(cls, parameter_set="default"):
         """Return testing parameter settings for the estimator.
@@ -191,52 +177,8 @@ class MySeriesAnnotator(BaseSeriesAnnotator):
         Returns
         -------
         params : dict or list of dict, default = {}
-            Parameters to create testing instances of the class
-            Each dict are parameters to construct an "interesting" test instance, i.e.,
-            `MyClass(**params)` or `MyClass(**params[i])` creates a valid test instance.
-            `create_test_instance` uses the first (or only) dictionary in `params`
-        """
 
-        # todo: set the testing parameters for the estimators
-        # Testing parameters can be dictionary or list of dictionaries
-        # Testing parameter choice should cover internal cases well.
-        #
-        # this method can, if required, use:
-        #   class properties (e.g., inherited); parent class test case
-        #   imported objects such as estimators from sktime or sklearn
-        # important: all such imports should be *inside get_test_params*, not at the top
-        #            since imports are used only at testing time
-        #
-        # The parameter_set argument is not used for automated, module level tests.
-        #   It can be used in custom, estimator specific tests, for "special" settings.
-        # A parameter dictionary must be returned *for all values* of parameter_set,
-        #   i.e., "parameter_set not available" errors should never be raised.
-        #
-        # A good parameter set should primarily satisfy two criteria,
-        #   1. Chosen set of parameters should have a low testing time,
-        #      ideally in the magnitude of few seconds for the entire test suite.
-        #       This is vital for the cases where default values result in
-        #       "big" models which not only increases test time but also
-        #       run into the risk of test workers crashing.
-        #   2. There should be a minimum two such parameter sets with different
-        #      sets of values to ensure a wide range of code coverage is provided.
-        #
-        # example 1: specify params as dictionary
-        # any number of params can be specified
-        # params = {"est": value0, "parama": value1, "paramb": value2}
-        #
-        # example 2: specify params as list of dictionary
-        # note: Only first dictionary will be used by create_test_instance
-        # params = [{"est": value1, "parama": value2},
-        #           {"est": value3, "parama": value4}]
-        # return params
-        #
-        # example 3: parameter set depending on param_set value
-        #   note: only needed if a separate parameter set is needed in tests
-        # if parameter_set == "special_param_set":
-        #     params = {"est": value1, "parama": value2}
-        #     return params
-        #
-        # # "default" params - always returned except for "special_param_set" value
-        # params = {"est": value3, "parama": value4}
-        # return params
+        """
+        params1 = {"clusterer": KMeans(n_clusters=2), "window_size": 2}
+        params2 = {}
+        return [params1, params2]
