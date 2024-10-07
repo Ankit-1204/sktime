@@ -7,12 +7,41 @@ Implementing segmentation using clustering, Read more at
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
-from sklearn.cluster import KMeans
 
 from sktime.annotation.base import BaseSeriesAnnotator
+from sktime.clustering.k_means import TimeSeriesKMeans
+from sktime.utils.sklearn import is_sklearn_clusterer
 
 __author__ = ["Ankit-1204"]
 __all__ = ["WindowSegmenter"]
+
+
+def window_timeseries(window_size, X):
+    """Create a list of segments of chosen Window Size for sktime clusterers.
+
+    Parameters
+    ----------
+    X : Pandas DataFrame
+    window_size : Integer
+
+    Returns
+    -------
+    np.array : 3D numpy array (n_segments, n_features, window_size)
+        A 3D array where each segment is reshaped for sktime use.
+    """
+    X_size = len(X)
+    n_features = X.shape[1]
+
+    sub_seg = [
+        X.iloc[i : window_size + i].values for i in range(0, X_size, window_size)
+    ]
+
+    if len(sub_seg[-1]) < window_size:
+        pad_length = window_size - len(sub_seg[-1])
+        pad = np.zeros((pad_length, n_features))
+        sub_seg[-1] = np.concatenate([sub_seg[-1], pad], axis=0)
+
+    return np.array(sub_seg).reshape(len(sub_seg), n_features, window_size)
 
 
 def window(window_size, X):
@@ -90,7 +119,7 @@ class WindowSegmenter(BaseSeriesAnnotator):
     >>> from sktime.annotation.wclust import WindowSegmenter
     >>> from sktime.datasets import load_gunpoint
     >>> X, y = load_gunpoint()
-    >>> clusterer = KMeans()
+    >>> clusterer = TimeSeriesKMeans()
     >>> segmenter = ClusterSegmenter(clusterer, 3)
     >>> segmenter._fit(X)
     >>> segment_labels = segmenter._predict(X)
@@ -104,9 +133,10 @@ class WindowSegmenter(BaseSeriesAnnotator):
     def __init__(self, clusterer=None, window_size=1):
         self.clusterer = clusterer
         self._clusterer_ = clusterer
+        self.window_size = window_size
         self._window_size = window_size
         if self.clusterer is None:
-            self._clusterer = KMeans()
+            self._clusterer = TimeSeriesKMeans()
         else:
             self._clusterer = self.clusterer
         super().__init__()
@@ -133,10 +163,16 @@ class WindowSegmenter(BaseSeriesAnnotator):
         """
         if isinstance(X, pd.Series):
             X = X.to_frame(X)
-        win_x = window(self._window_size, X)
-        seg = flattenSegments(win_x)
-        cloned_clusterer = clone(self._clusterer)
-        cloned_clusterer.fit(seg)
+        if is_sklearn_clusterer(self._window_size):
+            win_x = window(self._window_size, X)
+            seg = flattenSegments(win_x)
+            cloned_clusterer = clone(self._clusterer)
+            cloned_clusterer.fit(seg)
+        else:
+            win_x = window_timeseries(self._window_size, X)
+            cloned_clusterer = clone(self._clusterer)
+            cloned_clusterer.fit(win_x)
+
         self._clusterer_ = cloned_clusterer
         return self
 
@@ -156,10 +192,15 @@ class WindowSegmenter(BaseSeriesAnnotator):
         """
         if isinstance(X, pd.Series):
             X = X.to_frame(X)
-        win_x = window(self._window_size, X)
-        sub = flattenSegments(win_x)
+
         self.n_features, self.n_timepoints = X.shape
-        labels = self._clusterer_.predict(sub)
+        if is_sklearn_clusterer(self._clusterer_):
+            win_x = window(self._window_size, X)
+            sub = flattenSegments(win_x)
+            labels = self._clusterer_.predict(sub)
+        else:
+            win_x = window_timeseries(self._window_size, X)
+            labels = self._clusterer_.predict(win_x)
         flabel = finalLabels(labels, self._window_size, X)
         return pd.Series(flabel.flatten(), index=X.index)
 
@@ -179,6 +220,6 @@ class WindowSegmenter(BaseSeriesAnnotator):
         params : dict or list of dict, default = {}
 
         """
-        params1 = {"clusterer": KMeans(n_clusters=2), "window_size": 2}
+        params1 = {"clusterer": TimeSeriesKMeans(n_clusters=2), "window_size": 2}
         params2 = {}
         return [params1, params2]
