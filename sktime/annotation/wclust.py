@@ -220,6 +220,6 @@ class WindowSegmenter(BaseSeriesAnnotator):
         params : dict or list of dict, default = {}
 
         """
-        params1 = {"clusterer": TimeSeriesKMeans(n_clusters=2), "window_size": 2}
+        params1 = {"clusterer": TimeSeriesKMeans(n_clusters=3), "window_size": 2}
         params2 = {}
         return [params1, params2]
