@@ -163,7 +163,7 @@ class WindowSegmenter(BaseSeriesAnnotator):
         """
         if isinstance(X, pd.Series):
             X = X.to_frame(X)
-        if is_sklearn_clusterer(self._window_size):
+        if is_sklearn_clusterer(self._clusterer):
             win_x = window(self._window_size, X)
             seg = flattenSegments(win_x)
             cloned_clusterer = clone(self._clusterer)
