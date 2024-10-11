@@ -9,9 +9,9 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
+from sklearn.cluster import KMeans
 
 from sktime.annotation.base import BaseSeriesAnnotator
-from sktime.clustering.k_means import TimeSeriesKMeans
 from sktime.utils.sklearn import is_sklearn_clusterer
 
 __author__ = ["Ankit-1204"]
@@ -162,7 +162,7 @@ class WindowSegmenter(BaseSeriesAnnotator):
     >>> from sktime.annotation.wclust import WindowSegmenter
     >>> from sktime.datasets import load_gunpoint
     >>> X, y = load_gunpoint()
-    >>> clusterer = TimeSeriesKMeans()
+    >>> clusterer = KMeans()
     >>> segmenter = ClusterSegmenter(clusterer, 3)
     >>> segmenter._fit(X)
     >>> segment_labels = segmenter._predict(X)
@@ -189,7 +189,7 @@ class WindowSegmenter(BaseSeriesAnnotator):
         self.step_size = step_size
         self.return_segments = return_segments
         if self.clusterer is None:
-            self._clusterer = TimeSeriesKMeans()
+            self._clusterer = KMeans()
         else:
             self._clusterer = self.clusterer
         super().__init__()
@@ -291,6 +291,6 @@ class WindowSegmenter(BaseSeriesAnnotator):
         params : dict or list of dict, default = {}
 
         """
-        params1 = {"clusterer": TimeSeriesKMeans(n_clusters=2), "window_size": 2}
+        params1 = {"clusterer": KMeans(n_clusters=2), "window_size": 2}
         params2 = {}
         return [params1, params2]
