@@ -272,27 +272,3 @@ class WindowSegmenter(BaseSeriesAnnotator):
         params1 = {"clusterer": TimeSeriesKMeans(n_clusters=2), "window_size": 2}
         params2 = {}
         return [params1, params2]
-
-
-n_timepoints = 20
-
-# Generate a sine wave pattern
-time = np.linspace(0, 4 * np.pi, n_timepoints)
-data = np.sin(time)
-
-# Create a pandas Series with a datetime index
-time_index = pd.date_range(start="2024-01-01", periods=n_timepoints, freq="D")
-sine_series = pd.Series(data, index=time_index, name="SineWave")
-
-time1 = np.linspace(0, 4 * np.pi, n_timepoints)
-data1 = np.sin(time)
-
-# Create a pandas Series with a datetime index
-time_index1 = pd.date_range(start="2024-01-01", periods=n_timepoints, freq="D")
-sine_series1 = pd.Series(data1, index=time_index1, name="SineWave1")
-
-
-clus = WindowSegmenter(TimeSeriesKMeans(n_clusters=4), 5, True, 3)
-clus._fit(sine_series)
-ans = clus._predict(sine_series1)
-print(ans)
