@@ -4,6 +4,8 @@ Implementing segmentation using clustering, Read more at
 <https://en.wikipedia.org/wiki/Cluster_analysis>_.
 """
 
+from collections import Counter
+
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
@@ -131,6 +133,14 @@ def overlap_final_label(labels, window_size, step_size, X):
     return time_point_labels
 
 
+def aggregate_labels(flabel):
+    aggr_labels = []
+    for labels in flabel:
+        most_freq = Counter(labels).most_common(1)[0][0]
+        aggr_labels.append(most_freq)
+    return aggr_labels
+
+
 class WindowSegmenter(BaseSeriesAnnotator):
     """Window-based Time Series Segmentation via Clustering.
 
@@ -163,13 +173,21 @@ class WindowSegmenter(BaseSeriesAnnotator):
         "learning_type": "unsupervised",
     }
 
-    def __init__(self, clusterer=None, window_size=1, overlap=False, step_size=1):
+    def __init__(
+        self,
+        clusterer=None,
+        window_size=1,
+        overlap=False,
+        step_size=1,
+        return_segments=True,
+    ):
         self.clusterer = clusterer
         self._clusterer_ = clusterer
         self.window_size = window_size
         self._window_size = window_size
         self.overlap = overlap
         self.step_size = step_size
+        self.return_segments = return_segments
         if self.clusterer is None:
             self._clusterer = TimeSeriesKMeans()
         else:
@@ -239,7 +257,11 @@ class WindowSegmenter(BaseSeriesAnnotator):
             win_x = overlapping_window(self._window_size, self.step_size, X)
             labels = self._clusterer_.predict(win_x)
             flabel = overlap_final_label(labels, self._window_size, self.step_size, X)
-            flabel = pd.Series(flabel, index=X.index)
+            if self.return_segments:
+                flabel = pd.Series(flabel, index=X.index)
+            else:
+                aggr_labels = aggregate_labels(flabel)
+                return pd.Series(aggr_labels, index=X.index)
         else:
             if is_sklearn_clusterer(self._clusterer_):
                 win_x = window(self._window_size, X)
